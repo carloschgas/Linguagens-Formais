@@ -1,5 +1,3 @@
-//Carlos Chagas Oliveira Filho - 122178456
-
 //Nesse trabalho admiti que uma vez que o erro fosse encontrado, o lexer deveria parar de ler.
 
 #include <stdio.h>
