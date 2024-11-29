@@ -74,10 +74,7 @@ int verifyInvalid(char p);          // verifica se é caractere invalido
 
 //---------------------------------------
 
-void consumeNumbers(char **p, char number[256], int *numIndex,token*t);     // enquanto existirem algarismos, por conta da verifyNumbers armazena todos esses em um vetor
-                                                                            // depois verifica se tem ponto ou 'e' por conta de doubles, quando encontrar '\n'
-                                                                            // faz a verificacao se realmente pode ser double (numeros antes e depois do .)
-                                                                            // e faz as devidas atribuicoes ao token --> tipo (tag) e valor pra union
+void consumeNumbers(char **p, char number[MAX_LINE], int *numIndex,token*t);
 
 int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t);  // enquanto existirem letras [menor que len 16], por conta de verifyName armazena todos esses em um vetor
                                                                             // quando encontrar o final '\n', ele verifica o tamanho com verifySize
@@ -188,6 +185,7 @@ int verifyOperator(char p){
     switch (p){
     case '+':
     case '-':
+    case ',':
     case '*':
     case '/':
     case '%':
@@ -218,6 +216,7 @@ int verifyDouble(char *p){
 
     while (verifyNumber(*p)){
         antes = 1;
+        printf("numero antes verificado\n");
         p++;
     }
 
@@ -225,6 +224,7 @@ int verifyDouble(char *p){
         p++;
         while (verifyNumber(*p)){
             depois = 1;
+            printf("numero depois verificado\n");
             p++;
         }
     }
@@ -263,9 +263,12 @@ void consumeNumbers(char **p, char number[MAX_LINE], int *numIndex, token *t) {
 
     // Verificar se é double
     if (**p == '.' || **p == 'e' || **p == 'E') {
+        printf("debug1\n");
         number[(*numIndex)++] = **p;
         (*p)++;
         if (verifyDouble(*p)) {
+
+            printf("debug2\n");
             t->tipo = DOUBLE;
             t->u.duplo = strtod(number, NULL);
             return;
@@ -277,7 +280,8 @@ void consumeNumbers(char **p, char number[MAX_LINE], int *numIndex, token *t) {
 }
 
 
-int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t){
+int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t)
+{
     *nameIndex = 0;
     
     while (verifyName(**p)){
@@ -383,6 +387,7 @@ void consumeOperators(char **p, token *t) {
                 break;
             case ',':
                 t->tipo = COMMA;
+                break;
             case '=':
                 t->tipo = ATRIB;
             default:
