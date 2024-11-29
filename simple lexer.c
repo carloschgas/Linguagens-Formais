@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define MAX_LINE 256
 #define MAX_NAME 16
@@ -38,7 +39,8 @@ typedef enum
     NL,
     SQRT,
     POW,
-    COMMA
+    COMMA,
+    ERROR
 } tag;
 
 typedef struct
@@ -56,7 +58,7 @@ typedef struct
 // Protótipos e Comentários das funções
 //---------------------------------------
 
-void gettoken(char **p);            // verifica se o próximo char é nulo, se nao passa pro próximo
+token gettoken();            // verifica se o próximo char é nulo, se nao passa pro próximo
 int verifyNumber(char p);           // verifica se o caractere é digito 0-9
 int verifyName(char p);             // verifica se o caractere é letra a-z ou A-Z
 int verifyOperator(char p);         // verifica se o caractere é algum operador do enunciado do trabalho
@@ -89,65 +91,86 @@ void consumeOperators(char **p, token *t);                                  // q
 
 void consumeComment (char **p);                                             // consome o '#' e todo o resto ate encontrar uma quebra de linha ou \0.
 
+void print_token(token t);
 //---------------------------------------
 
-const char* tagToString(tag t); // converte o valor das tags do enum para uma string, utilizado para printar em consumeNumbers, operators e names, e na funcao main.
 
-int main(int argc, char *argv[]){
-    
+int main() {
+    static char linha[MAX_LINE];
+    char *p;
     token t;
-    static char linha[2048];
 
-    char *p = NULL;
-    char number[256], name[256];
-    int numIndex = 0, nameIndex = 0;
-    int numLinha = 0;
-
-    while (fgets(linha, sizeof(linha), stdin) != NULL){
-        numLinha++;
-
-        if (!verifySize(linha, MAX_LINE)){
-            printf("Erros\n-------\nLinha %d Excede 256\n", numLinha);
-            exit(1);
-        }
-
+    while (fgets(linha, sizeof(linha), stdin) != NULL) {
         p = linha;
 
-        while (*p != '\0'){
-            if (verifyNewLine(*p)){
-                t.tipo = NL;
-                printf("%s", tagToString(t.tipo));
-                p++;
-                continue;
+        while (*p != '\0') {
+            t = gettoken(&p);
+            if (t.tipo == ERROR) {
+                printf("Erro na linha: %s\n", linha);
+                return 1; // Interromper ao encontrar erro
             }
-
-            if (verifyNumber(*p)) consumeNumbers(&p, number, &numIndex, &t);
-            
-            else if (verifyName(*p)){
-                if (consumeNames(&p, name, &nameIndex, &t) == -1){
-                    printf("Erros\n-------\nLinha %d - NAME excede 16\n", numLinha);
-                    exit(1);
-                }
-            }
-            else if (verifyOperator(*p)) consumeOperators(&p, &t);
-            else if (verifyComment(*p)) consumeComment(&p);
-            else if (verifyInvalid(*p)){
-                printf("Erros\n-------\nLinha %d - Digito Invalido\n", numLinha);
-                exit(1);
-            }
-            else gettoken(&p);
+            print_token(t);
         }
-
-        printf("\n");
     }
 
     return 0;
 }
 
-void gettoken(char **p){
-    if (p == NULL || *p == NULL) return;
-    (*p)++;
+
+token gettoken(char **p) {
+    token t;
+    char number[MAX_LINE] = {0}, name[MAX_NAME] = {0};
+    int numIndex = 0, nameIndex = 0;
+
+    //whitespace
+    while (isspace(**p) && **p != '\n') (*p)++;
+
+    //eof
+    if (**p == '\0' || **p == '\n') {
+        t.tipo = NL;
+        if (**p == '\n') (*p)++;
+        return t;
+    }
+
+    //comentários
+    if (verifyComment(**p)) {
+        consumeComment(p);
+        return gettoken(p);
+    }
+
+    //números
+    if (verifyNumber(**p)) {
+        consumeNumbers(p, number, &numIndex, &t);
+        return t;
+    }
+
+    //nomes
+    if (verifyName(**p)) {
+        if (consumeNames(p, name, &nameIndex, &t)) {
+            return t;
+        } else {
+            t.tipo = ERROR;
+            return t;
+        }
+    }
+
+    //operadores
+    if (verifyOperator(**p)) {
+        consumeOperators(p, &t);
+        return t;
+    }
+
+    //invalido
+    if (verifyInvalid(**p)) {
+        t.tipo = ERROR;
+        return t;
+    }
+
+
+    t.tipo = ERROR;
+    return t;
 }
+
 
 int verifyNumber(char p){
     return (p >= '0' && p <= '9');
@@ -232,59 +255,27 @@ int verifyInvalid (char p){
             p == '}' || p == '[' || p == ']' || 
             p == '`' || p == '"');
 }
-
-void consumeNumbers(char **p, char number[256], int *numIndex, token *t){
-    *numIndex = 0;
-
-    while (verifyNumber(**p)){
+void consumeNumbers(char **p, char number[MAX_LINE], int *numIndex, token *t) {
+    while (verifyNumber(**p)) {
         number[(*numIndex)++] = **p;
         (*p)++;
     }
-    
-    number[*numIndex] = '\0';
 
-    if (**p == '.'){
+    // Verificar se é double
+    if (**p == '.' || **p == 'e' || **p == 'E') {
         number[(*numIndex)++] = **p;
         (*p)++;
-
-        while (verifyNumber(**p)){
-            number[(*numIndex)++] = **p;
-            (*p)++;
+        if (verifyDouble(*p)) {
+            t->tipo = DOUBLE;
+            t->u.duplo = strtod(number, NULL);
+            return;
         }
     }
 
-    if (**p == 'e' || **p == 'E'){
-        number[(*numIndex)++] = **p;
-        (*p)++;
-        
-        if (**p == '+' || **p == '-'){
-            number[(*numIndex)++] = **p;
-            (*p)++;
-        }
-
-        while (verifyNumber(**p)){
-            number[(*numIndex)++] = **p;
-            (*p)++;
-        }
-    }
-
-    number[*numIndex] = '\0';
-
-    if (verifyDouble(number)){
-        t->u.duplo = atof(number);
-        t->tipo = DOUBLE;
-        
-        printf("%s\t%.6f\n",tagToString(t->tipo), t->u.duplo);
-    }
-    
-    else {
-        t->tipo = INT;
-        t->u.inteiro = atoi(number);
-        
-        printf("%s\t%d\n", tagToString(t->tipo), t->u.inteiro);
-        
-    }
+    t->tipo = INT;
+    t->u.inteiro = strtol(number, NULL, 10);
 }
+
 
 int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t){
     *nameIndex = 0;
@@ -305,18 +296,15 @@ int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t){
         
        if (verifySpecialNames(name) == 1){
         t->tipo = SQRT;
-        printf("%s\n", tagToString(SQRT));
        }
 
        else if (verifySpecialNames(name) == 2){
         t->tipo = POW;
-        printf("%s\n", tagToString(POW));
        }
 
         else {
             t->tipo = NAME;
             strncpy(t->u.nome, name, MAX_NAME);
-            printf("%s\t%s\n", tagToString(NAME),name);
         }
         
         return 1;
@@ -327,97 +315,76 @@ int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t){
 void consumeOperators(char **p, token *t) {
     if (**p == '<' && *(*p + 1) == '=') {
         t->tipo = LEQ;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '>' && *(*p + 1) == '=') {
         t->tipo = GEQ;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '=' && *(*p + 1) == '=') {
         t->tipo = EQ;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '!' && *(*p + 1) == '=') {
         t->tipo = NEQ;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '&' && *(*p + 1) == '&') {
         t->tipo = AND;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '|' && *(*p + 1) == '|') {
         t->tipo = OR;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '<' && *(*p + 1) == '<') {
         t->tipo = LSHIFT;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else if (**p == '>' && *(*p + 1) == '>') {
         t->tipo = RSHIFT;
-        printf("%s\n", tagToString(t->tipo));
         (*p) += 2;
     } else {
         switch (**p) {
             case '+':
                 t->tipo = ADD;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '-':
                 t->tipo = SUB;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '*':
                 t->tipo = MUL;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '/':
                 t->tipo = DIV;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '%':
                 t->tipo = MOD;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '<':
                 t->tipo = LE;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '>':
                 t->tipo = GE;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '!':
                 t->tipo = NOT;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '~':
                 t->tipo = BNOT;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '&':
                 t->tipo = BAND;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '|':
                 t->tipo = BOR;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '^':
                 t->tipo = BXOR;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case '(':
                 t->tipo = LPAREN;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case ')':
                 t->tipo = RPAREN;
-                printf("%s\n", tagToString(t->tipo));
                 break;
             case ',':
                 t->tipo = COMMA;
-                printf("%s\n", tagToString (t->tipo));
+            case '=':
+                t->tipo = ATRIB;
             default:
                 break;
         }
@@ -430,40 +397,40 @@ void consumeComment(char **p){
     while (**p != '\n' && **p != '\0') (*p)++;
 }
 
-const char* tagToString(tag t) {
-    switch (t) {
-        case INT: return "INT";
-        case DOUBLE: return "DOUBLE";
-        case NAME: return "NAME";
-        case LEQ: return "LEQ";
-        case GEQ: return "GEQ";
-        case EQ: return "EQ";
-        case NEQ: return "NEQ";
-        case AND: return "AND";
-        case OR: return "OR";
-        case LSHIFT: return "LSHIFT";
-        case RSHIFT: return "RSHIFT";
-        case ADD: return "ADD";
-        case SUB: return "SUB";
-        case MUL: return "MUL";
-        case DIV: return "DIV";
-        case MOD: return "MOD";
-        case LE: return "LE";
-        case GE: return "GE";
-        case NOT: return "NOT";
-        case BNOT: return "BNOT";
-        case BAND: return "BAND";
-        case BOR: return "BOR";
-        case BXOR: return "BXOR";
-        case LPAREN: return "LPAREN";
-        case RPAREN: return "RPAREN";
-        case ATRIB: return "ATRIB";
-        case NL: return "NL";
-        case SQRT: return "SQRT";
-        case POW: return "POW";
-        case COMMA: return "COMMA";
-        default: 
-            "ERRO - TAG INEXISTENTE NO ENUM";
-            exit(1);
+
+
+void print_token(token t) {
+    switch (t.tipo) {
+        case NL: printf("NL\n"); break;
+        case NAME: printf("NAME\t%s\n", t.u.nome); break;
+        case SQRT: printf("SQRT\n"); break;
+        case POW: printf("POW\n"); break;
+        case INT: printf("INT\t%ld\n", t.u.inteiro); break;
+        case DOUBLE: printf("DOUBLE\t%f\n", t.u.duplo); break;
+        case ADD: printf("ADD\n"); break;
+        case SUB: printf("SUB\n"); break;
+        case MUL: printf("MUL\n"); break;
+        case DIV: printf("DIV\n"); break;
+        case MOD: printf("MOD\n"); break;
+        case LE: printf("LE\n"); break;
+        case LEQ: printf("LEQ\n"); break;
+        case GE: printf("GE\n"); break;
+        case GEQ: printf("GEQ\n"); break;
+        case EQ: printf("EQ\n"); break;
+        case NEQ: printf("NEQ\n"); break;
+        case NOT: printf("NOT\n"); break;
+        case AND: printf("AND\n"); break;
+        case OR: printf("OR\n"); break;
+        case BNOT: printf("BNOT\n"); break;
+        case BAND: printf("BAND\n"); break;
+        case BOR: printf("BOR\n"); break;
+        case BXOR: printf("BXOR\n"); break;
+        case LSHIFT: printf("LSHIFT\n"); break;
+        case RSHIFT: printf("RSHIFT\n"); break;
+        case LPAREN: printf("LPAREN\n"); break;
+        case RPAREN: printf("RPAREN\n"); break;
+        case ATRIB: printf("ATRIB\n"); break;
+        case COMMA: printf("COMMA\n"); break;
+        default: break; 
     }
 }
