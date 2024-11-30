@@ -64,7 +64,7 @@ int verifyName(char p);             // verifica se o caractere é letra a-z ou A
 int verifyOperator(char p);         // verifica se o caractere é algum operador do enunciado do trabalho
 int verifyNewLine(char p);          // verifica se é '\n'
 int verifySpecialNames(char name[MAX_NAME]); // verifica se é palavra palavra reservada é == sqrt ou == pow (maiusculas inclusas)
-int verifyDouble(char *p);          // verifica se é um numero float a partir da existencia de um '.' alem de validacoes com numeros antes e depois dele. admite um caractere 'e' 'E' opcional
+int verifyDouble(char **p);          // verifica se é um numero float a partir da existencia de um '.' alem de validacoes com numeros antes e depois dele. admite um caractere 'e' 'E' opcional
 int verifySize(char *p, int MAX);   // verifica se o strlen < MAX
 int verifyComment(char p);          // verifica se tem '#'
 int verifyInvalid(char p);          // verifica se é caractere invalido
@@ -211,35 +211,6 @@ int verifySpecialNames(char name[MAX_NAME]){
     else return -1;
 }
 
-int verifyDouble(char *p){
-    int antes = 0, depois = 0;
-
-    while (verifyNumber(*p)){
-        antes = 1;
-        printf("numero antes verificado\n");
-        p++;
-    }
-
-    if (*p == '.'){
-        p++;
-        while (verifyNumber(*p)){
-            depois = 1;
-            printf("numero depois verificado\n");
-            p++;
-        }
-    }
-
-    if (*p == 'e' || *p == 'E'){
-        p++;
-        if (*p == '+' || *p == '-')
-            p++;
-        while (verifyNumber(*p))
-            p++;
-    }
-
-    return (antes && depois);
-}
-
 int verifySize(char *p, int MAX){
     int len = strlen(p);
     return len <= MAX;
@@ -255,30 +226,56 @@ int verifyInvalid (char p){
             p == '}' || p == '[' || p == ']' || 
             p == '`' || p == '"');
 }
+
 void consumeNumbers(char **p, char number[MAX_LINE], int *numIndex, token *t) {
+    int tem_inteiro = 0;
+    int tem_decimal = 0;
+
+    // inteiro
     while (verifyNumber(**p)) {
         number[(*numIndex)++] = **p;
         (*p)++;
+        tem_inteiro = 1; 
     }
 
-    // Verificar se é double
-    if (**p == '.' || **p == 'e' || **p == 'E') {
-        printf("debug1\n");
-        number[(*numIndex)++] = **p;
+    // decimal
+    if (**p == '.') {
+        number[(*numIndex)++] = **p; //come ponto
         (*p)++;
-        if (verifyDouble(*p)) {
 
-            printf("debug2\n");
-            t->tipo = DOUBLE;
-            t->u.duplo = strtod(number, NULL);
-            return;
+        
+        while (verifyNumber(**p)) {
+            number[(*numIndex)++] = **p;
+            (*p)++;
+            tem_decimal = 1; 
         }
     }
 
-    t->tipo = INT;
-    t->u.inteiro = strtol(number, NULL, 10);
-}
+    // cientifico
+    if (**p == 'e' || **p == 'E') {
+        number[(*numIndex)++] = **p; 
+        (*p)++;
+        if (**p == '+' || **p == '-') {
+            number[(*numIndex)++] = **p; 
+            (*p)++;
+        }
+        while (verifyNumber(**p)) {
+            number[(*numIndex)++] = **p;
+            (*p)++;
+        }
+    }
 
+    number[*numIndex] = '\0'; 
+
+    
+    if (tem_inteiro && tem_decimal) {
+        t->tipo = DOUBLE;
+        t->u.duplo = strtod(number, NULL); 
+    } else {
+        t->tipo = INT;
+        t->u.inteiro = strtol(number, NULL, 10); 
+    }
+}
 
 int consumeNames(char **p, char name[MAX_NAME], int *nameIndex, token *t)
 {
