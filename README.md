@@ -1,4 +1,4 @@
-##Description
+## Description
 
 This project implements the lexical analyzer (lexer) for a simple calculator language inspired by the operators of the C programming language.
 
